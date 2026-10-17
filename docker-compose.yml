@@ -1,0 +1,44 @@
+# Weather End-to-End Project
+# Start:  docker compose up -d sqlserver        (database only - use this while running the notebooks)
+#         docker compose up -d --build           (database + Streamlit app at http://localhost:8501)
+# Stop:   docker compose down                   (data is kept in the "sqlserver_data" volume)
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: weather_sqlserver
+    platform: linux/amd64            # needed on Apple Silicon (M1/M2/M3) Macs
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Weather_Pass123!"   # must be 8+ chars with upper, lower, digit, symbol
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Weather_Pass123!' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  streamlit:
+    build: .
+    container_name: weather_streamlit
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      DB_SERVER: "sqlserver"          # inside Docker the DB is reached by its service name
+      DB_PORT: "1433"
+      DB_USER: "sa"
+      DB_PASSWORD: "Weather_Pass123!"
+      DB_NAME: "WeatherDB"
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./models:/app/models          # the trained model from notebook 02
+
+volumes:
+  sqlserver_data:
